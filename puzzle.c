@@ -171,8 +171,8 @@ void print_path_to_root(Node* node) {
 
 /* BFS for puzzle
  * IMPLEMENTATION NOTES
- * Time complexity: O(N*2d)
- * Space complexity: O(N*2d)
+ * Time complexity: O(N^2d)
+ * Space complexity: O(N^2d)
  * where d: depth of the best solution for NxN matrix
  * This is because, for BFS, complexity is O(b^d); b is N^2 (N^2 transitions per state), whereas d will be the depth
  * of the solution closest to root
