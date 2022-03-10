@@ -20,6 +20,7 @@ typedef struct Node {
     int depth;
 } Node;
 
+// ##QUEUE##
 // define a queue element
 typedef struct QueueElement {
     Node* node;
@@ -57,6 +58,126 @@ Node* queue_pop(Queue* queue) {
     queue->head = queue->head->prev;
     free(tmp);
     return popped;
+}
+
+// ##BINARY MIN HEAP##
+
+// define a heap element
+// contains node, and value given to node by a heuristic function
+typedef struct HeapElement {
+    Node* node;
+    int hval;
+} HeapElement;
+
+// define a heap
+// h is the heuristic function to be used on its elements to find their hval
+typedef struct Heap {
+    HeapElement* arr;
+    int curr_size;
+    int max_size;
+    int (*h)(Node* n);
+} Heap;
+
+// Initialize a new heap
+Heap* init_heap(int (*h)(Node* n)) {
+    Heap* heap = (Heap*) malloc(sizeof(Heap));
+    heap->curr_size = 0;
+    heap->max_size = 16;
+    heap->arr = (HeapElement*) malloc(sizeof(HeapElement)*heap->max_size);
+    heap->h = h;
+}
+
+Heap* delete_heap(Heap* heap) {
+    free(heap->arr);
+    free(heap);
+}
+
+int heap_parent(int index) {
+    return (index-1) / 2;
+}
+
+int heap_right_child(int index) {
+    return 2*index+2;
+}
+
+int heap_left_child(int index) {
+    return 2*index+1;
+}
+
+// Heapify up method
+void heapify_up(Heap* heap, int index) {
+    if (!index) {
+        return;
+    }
+    int parent_index = heap_parent(index);
+    if (heap->arr[index].hval < heap->arr[parent_index].hval) {
+        HeapElement tmp = heap->arr[index];
+        heap->arr[index] = heap->arr[parent_index];
+        heap->arr[parent_index] = tmp;
+        heapify_up(heap, parent_index);
+    }
+}
+
+// Heapify down method
+void heapify_down(Heap* heap, int index) {
+    int left_child = heap_left_child(index);
+    int right_child = heap_right_child(index);
+
+    if (right_child >= heap->curr_size) {
+        if (left_child < heap->curr_size && heap->arr[index].hval > heap->arr[left_child].hval) {
+            HeapElement tmp = heap->arr[index];
+            heap->arr[index] = heap->arr[left_child];
+            heap->arr[left_child] = tmp;
+        }
+        return;
+    }
+
+    if (heap->arr[index].hval < heap->arr[left_child].hval && heap->arr[index].hval < heap->arr[right_child].hval) {
+        return;
+    }
+
+    int index_of_min;
+    if (heap->arr[left_child].hval <= heap->arr[right_child].hval) {
+        index_of_min = left_child;
+    }
+    else {
+        index_of_min = right_child;
+    }
+    HeapElement tmp = heap->arr[index];
+    heap->arr[index] = heap->arr[index_of_min];
+    heap->arr[index_of_min] = tmp;
+
+    heapify_down(heap, index_of_min);
+}
+
+// add a new element to the heap
+// if there is not enough space, allocate more
+void heap_add(Heap* heap, Node* node) {
+    if (heap->curr_size == heap->max_size) {
+        heap->max_size += 16;
+        heap->arr = realloc(heap->arr, sizeof(HeapElement)*heap->max_size);
+    }
+
+    heap->arr[heap->curr_size].node = node;
+    heap->arr[heap->curr_size].hval = heap->h(node);
+
+    heapify_up(heap, (heap->curr_size)++);
+}
+
+// remove an element from the heap
+// TODO: possibly deallocate space when a lot of elements have been removed
+Node* heap_remove(Heap* heap, int index) {
+    if (index >= heap->curr_size || index < 0) {
+        return NULL;
+    }
+
+    HeapElement tmp = heap->arr[index];
+    heap->arr[index] = heap->arr[--(heap->curr_size)];
+    heap->arr[heap->curr_size] = tmp;
+
+    heapify_down(heap, index);
+
+    return heap->arr[heap->curr_size].node;
 }
 
 // create a new node, initializing it to passed values
@@ -169,6 +290,17 @@ void print_path_to_root(Node* node) {
     printf("\nSolution has %d steps.\n", steps);
 }
 
+void dealloc_path_to_root(Node* node) {
+    Node* curr = node;
+    Node* next;
+
+    while (curr != NULL) {
+        next = curr->parent;
+        free(curr);
+        curr = next;
+    }
+}
+
 /* BFS for puzzle
  * IMPLEMENTATION NOTES
  * Time complexity: O(N^2d)
@@ -215,6 +347,7 @@ Node* BFS(Node* start_node) {
                 }
 
                 if (is_final(new_node)) {
+                    free(queue);
                     printf("\n");
                     return new_node;
                 }
@@ -227,6 +360,72 @@ Node* BFS(Node* start_node) {
 
     }
 
+    free(queue);
+    printf("\n");
+    return NULL;
+}
+
+/* Heuristic 1 for BestFS
+ * Returns number of 0s in matrix of node
+ */
+int h1(Node* n) {
+    int zeroes = 0;
+
+    for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < N; ++j) {
+            if (!n->matrix[i][j]) {
+                ++zeroes;
+            }
+        }
+    }
+
+    return zeroes;
+}
+
+/* BestFS for puzzle
+ * Arguments: initial node, heuristic function
+ */
+Node* BestFS(Node* start_node, int (*h)(Node* n)) {
+    if (is_final(start_node)) {
+        return start_node;
+    }
+
+    bool* visited = (bool*) calloc((unsigned long)pow(2, N*N), sizeof(bool));
+    int visited_length = 0;
+    // create heap utilizing passed heuristic
+    Heap* heap = init_heap(h);
+    heap_add(heap, start_node);
+
+    Node* current;
+
+    while ((current = heap_remove(heap, 0)) != NULL) {
+        printf("\rDepth: %d, visited set length: %d", current->depth, visited_length);
+
+        for (int i = 0; i < N; ++i) {
+            for (int j = 0; j < N; ++j) {
+                int coordinates[2] = {i, j};
+                Node* new_node = transition(current, coordinates);
+                int node_hash = hash_node(new_node);
+
+                if (visited[node_hash]) {
+                    free(new_node);
+                    continue;
+                }
+
+                if (is_final(new_node)) {
+                    delete_heap(heap);
+                    printf("\n");
+                    return new_node;
+                }
+
+                heap_add(heap, new_node);
+                visited[node_hash] = true;
+                ++visited_length;
+            }
+        }
+    }
+
+    delete_heap(heap);
     printf("\n");
     return NULL;
 }
@@ -243,14 +442,15 @@ int main(void) {
     }
 
     Node* initial = create_node(initial_state, NULL, NULL, &final_state, 0);
-
-    Node* result = BFS(initial);
+    Node* result = BestFS(initial, h1);
+    //Node* result = BFS(initial);
 
     if (result == NULL) {
         printf("Solution not found.\n");
     }
     else {
         print_path_to_root(result);
+        dealloc_path_to_root(result);
     }
 
     return 0;

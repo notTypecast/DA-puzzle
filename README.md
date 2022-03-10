@@ -9,7 +9,7 @@ This repository aims to explore different ways of solving this puzzle, for incre
 Currently, the following algorithms have been implemented:
 * BFS (Python, C)
 * IDS (Python)
-* BestFS (Python)
+* BestFS (Python, C)
 
 It is interesting to note that the Python implementation of BFS will require a few hours on an average computer to find the solution for N=5 (optimal solution depth: 15), whereas the C implementation requires less than a minute.\
 BestFS is by far the fastest algorithm. Using the heuristic function h(n): total 0s in matrix of state n, a solution can be found for N=5 in seconds. However, that solution is obviously not optimal.
