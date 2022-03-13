@@ -3,7 +3,8 @@
 #include <string.h>
 #include <stdbool.h>
 #include <math.h>
-#define N 5
+#include <time.h>
+#define N 6
 
 /* Puzzle description
  * NxN matrix M, of 0s and 1s
@@ -180,6 +181,16 @@ Node* heap_remove(Heap* heap, int index) {
     return heap->arr[heap->curr_size].node;
 }
 
+// gets bit at given position of bit array
+int get_bit(const int bit_array[], unsigned long pos) {
+    return ((bit_array[pos/(sizeof(int)*8)] & (1 << (pos % (sizeof(int)*8)))) != 0);
+}
+
+// sets bit at given bit array position to 1
+void set_bit(int bit_array[], unsigned long pos) {
+    bit_array[pos/(sizeof(int)*8)] |= (1 << (pos % (sizeof(int)*8)));
+}
+
 // create a new node, initializing it to passed values
 Node* create_node(short matrix[N][N], Node* parent, const int* parent_transition, short (*final_state)[N][N], int depth) {
     // allocate memory for new node
@@ -234,8 +245,8 @@ bool is_final(Node* node) {
 // top to bottom representing lowering significance
 // i.e [1 0; 0 1] would be 1001, or 9
 // in this way, each state has a unique hash value
-int hash_node(Node* node) {
-    int hash = 0;
+unsigned long hash_node(Node* node) {
+    unsigned long hash = 0;
 
     for (int i = 0; i < N; ++i) {
         for (int j = 0; j < N; ++j) {
@@ -310,59 +321,78 @@ void dealloc_path_to_root(Node* node) {
  * of the solution closest to root
  * For this reason, it becomes nearly impossible to run this on an average computer for N>5
  * Average space required for each N:
- * N=1: 2 bytes
- * N=2: 16 bytes
- * N=3: 512 bytes
- * N=4: 64 KB
- * N=5: 32 MB
- * N=6: 64 GB
- * N=7: 512 TB
+ * N=1: 2 bits
+ * N=2: 16 bits
+ * N=3: 512 bits
+ * N=4: 64 Kbits
+ * N=5: 32 Mbits
+ * N=6: 64 Gbits
+ * N=7: 512 Tbits
  */
 Node* BFS(Node* start_node) {
     if (is_final(start_node)) {
         return start_node;
     }
 
-    // keep "visited" set as array of booleans, of size 2^(N^2)
-    // the value of visited[i] indicated whether node with hash=i has been visited
-    bool* visited = (bool*) calloc((unsigned long)pow(2, N*N), sizeof(bool));
+    // keep "visited" set as bit array
+    // allocating a total of 2^(N^2)/8 elements, since each is of size 1 byte (or 8 bits), so each represents 8 states
+    // the value of bit i indicates whether node with hash=i has been visited
+    int* visited = (int*) calloc((unsigned long)ceil(pow(2, N*N)/8), 1);
+    if (visited == NULL) {
+        perror("Not enough memory");
+        exit(1);
+    }
     int visited_length = 0;
     Queue* queue = (Queue*) malloc(sizeof(Queue));
     queue_push(queue, start_node);
+    int queue_length = 1;
 
     while (queue->head != NULL) {
         Node* current = queue_pop(queue);
+        --queue_length;
 
-        printf("\rDepth: %d, visited set length: %d", current->depth, visited_length);
+        printf("\rDepth: %d, visited set length: %d, queue length: %d", current->depth, visited_length, queue_length);
 
         for (int i = 0; i < N; ++i) {
             for (int j = 0; j < N; ++j) {
                 int coordinates[2] = {i, j};
                 Node* new_node = transition(current, coordinates);
-                int node_hash = hash_node(new_node);
+                unsigned long node_hash = hash_node(new_node);
 
-                if (visited[node_hash]) {
+                if (get_bit(visited, node_hash)) {
                     free(new_node);
                     continue;
                 }
 
                 if (is_final(new_node)) {
                     free(queue);
+                    free(visited);
                     printf("\n");
                     return new_node;
                 }
 
                 queue_push(queue, new_node);
-                visited[node_hash] = true;
+                set_bit(visited, node_hash);
                 ++visited_length;
+                ++queue_length;
             }
         }
 
     }
 
     free(queue);
+    free(visited);
     printf("\n");
     return NULL;
+}
+
+/* "Heuristic" for BestFS returning a random integer 0-39
+ * Used to demonstrate the importance of the heuristic function
+ * Running BestFS with this function as a heuristic will essentially cause it to make a random choice each step,
+ * resulting in a very non-optimal solution being found with (usually) hundreds of steps
+ */
+int hrand(Node* n) {
+    return rand() % 40;
 }
 
 /* Heuristic 1 for BestFS
@@ -382,6 +412,95 @@ int h1(Node* n) {
     return zeroes;
 }
 
+/* Heuristic 2 for BestFS
+ * Looks for patterns of 0s that match transitions and adds 1 for each one (no overlap)
+ * Adds 1 for each 0 not in such a pattern
+ */
+int h2(Node* n) {
+    int hval = 0;
+
+    bool recognized[N][N] = {0};
+
+    for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < N; ++j) {
+            // if cell is 1 or was previously included in pattern, skip
+            if (n->matrix[i][j] || recognized[i][j]) {
+                continue;
+            }
+            // determine which cells contain unrecognized 0s
+            bool above = i-1 >= 0;
+            bool below = i+1 < N;
+            bool left = j-1 >= 0;
+            bool right = j+1 < N;
+
+            // look for cross
+            if (above && below && left && right) {
+                if (!(n->matrix[i-1][j] || recognized[i-1][j] || n->matrix[i+1][j] || recognized[i+1][j] ||
+                n->matrix[i][j-1] || recognized[i][j-1] || n->matrix[i][j+1] || recognized[i][j+1])) {
+                    hval += 1;
+                    recognized[i][j] = true;
+                    recognized[i-1][j] = true;
+                    recognized[i+1][j] = true;
+                    recognized[i][j-1] = true;
+                    recognized[i][j+1] = true;
+                }
+            }
+            // look for top-right-bottom piece
+            else if (above && right && below) {
+                if (!(n->matrix[i-1][j] || recognized[i-1][j] || n->matrix[i+1][j] || recognized[i+1][j] ||
+                n->matrix[i][j+1] || recognized[i][j+1])) {
+                    hval += 1;
+                    recognized[i][j] = true;
+                    recognized[i-1][j] = true;
+                    recognized[i+1][j] = true;
+                    recognized[i][j+1] = true;
+                }
+            }
+            // look for top-left-bottom piece
+            else if (above && left && below) {
+                if (!(n->matrix[i-1][j] || recognized[i-1][j] || n->matrix[i+1][j] || recognized[i+1][j] ||
+                n->matrix[i][j-1] || recognized[i][j-1])) {
+                    hval += 1;
+                    recognized[i][j] = true;
+                    recognized[i-1][j] = true;
+                    recognized[i+1][j] = true;
+                    recognized[i][j-1] = true;
+                }
+            }
+            // look for right-bottom piece
+            else if (right && below) {
+                if (!(n->matrix[i-1][j] || recognized[i-1][j] || n->matrix[i][j+1] || recognized[i][j+1])) {
+                    hval += 1;
+                    recognized[i][j] = true;
+                    recognized[i-1][j] = true;
+                    recognized[i][j+1] = true;
+                }
+            }
+            // look for top-left piece
+            else if (above && left) {
+                if (!(n->matrix[i+1][j] || recognized[i+1][j] || n->matrix[i][j-1] || recognized[i][j-1])) {
+                    hval += 1;
+                    recognized[i][j] = true;
+                    recognized[i+1][j] = true;
+                    recognized[i][j-1] = true;
+                }
+            }
+
+        }
+    }
+
+    // for each unrecognized 0, add 1 to hval
+    for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < N; ++j) {
+            if (!(n->matrix[i][j] || recognized[i][j])) {
+                hval += 1;
+            }
+        }
+    }
+
+    return hval;
+}
+
 /* BestFS for puzzle
  * Arguments: initial node, heuristic function
  */
@@ -390,24 +509,26 @@ Node* BestFS(Node* start_node, int (*h)(Node* n)) {
         return start_node;
     }
 
-    bool* visited = (bool*) calloc((unsigned long)pow(2, N*N), sizeof(bool));
+    int* visited = (int*) calloc((unsigned long)ceil(pow(2, N*N)/8), 1);
     int visited_length = 0;
     // create heap utilizing passed heuristic
     Heap* heap = init_heap(h);
     heap_add(heap, start_node);
+    int heap_length = 1;
 
     Node* current;
 
     while ((current = heap_remove(heap, 0)) != NULL) {
-        printf("\rDepth: %d, visited set length: %d", current->depth, visited_length);
+        --heap_length;
+        printf("\rDepth: %d, visited set length: %d, heap length: %d", current->depth, visited_length, heap_length);
 
         for (int i = 0; i < N; ++i) {
             for (int j = 0; j < N; ++j) {
                 int coordinates[2] = {i, j};
                 Node* new_node = transition(current, coordinates);
-                int node_hash = hash_node(new_node);
+                unsigned long node_hash = hash_node(new_node);
 
-                if (visited[node_hash]) {
+                if (get_bit(visited, node_hash)) {
                     free(new_node);
                     continue;
                 }
@@ -419,8 +540,9 @@ Node* BestFS(Node* start_node, int (*h)(Node* n)) {
                 }
 
                 heap_add(heap, new_node);
-                visited[node_hash] = true;
+                set_bit(visited, node_hash);
                 ++visited_length;
+                ++heap_length;
             }
         }
     }
@@ -431,6 +553,7 @@ Node* BestFS(Node* start_node, int (*h)(Node* n)) {
 }
 
 int main(void) {
+    srand(time(NULL));
     short initial_state[N][N];
     short final_state[N][N];
 
