@@ -436,7 +436,7 @@ int h2(Node* n) {
             // look for cross
             if (above && below && left && right) {
                 if (!(n->matrix[i-1][j] || recognized[i-1][j] || n->matrix[i+1][j] || recognized[i+1][j] ||
-                n->matrix[i][j-1] || recognized[i][j-1] || n->matrix[i][j+1] || recognized[i][j+1])) {
+                      n->matrix[i][j-1] || recognized[i][j-1] || n->matrix[i][j+1] || recognized[i][j+1])) {
                     hval += 1;
                     recognized[i][j] = true;
                     recognized[i-1][j] = true;
@@ -445,10 +445,10 @@ int h2(Node* n) {
                     recognized[i][j+1] = true;
                 }
             }
-            // look for top-right-bottom piece
+                // look for top-right-bottom piece
             else if (above && right && below) {
                 if (!(n->matrix[i-1][j] || recognized[i-1][j] || n->matrix[i+1][j] || recognized[i+1][j] ||
-                n->matrix[i][j+1] || recognized[i][j+1])) {
+                      n->matrix[i][j+1] || recognized[i][j+1])) {
                     hval += 1;
                     recognized[i][j] = true;
                     recognized[i-1][j] = true;
@@ -456,10 +456,10 @@ int h2(Node* n) {
                     recognized[i][j+1] = true;
                 }
             }
-            // look for top-left-bottom piece
+                // look for top-left-bottom piece
             else if (above && left && below) {
                 if (!(n->matrix[i-1][j] || recognized[i-1][j] || n->matrix[i+1][j] || recognized[i+1][j] ||
-                n->matrix[i][j-1] || recognized[i][j-1])) {
+                      n->matrix[i][j-1] || recognized[i][j-1])) {
                     hval += 1;
                     recognized[i][j] = true;
                     recognized[i-1][j] = true;
@@ -467,21 +467,21 @@ int h2(Node* n) {
                     recognized[i][j-1] = true;
                 }
             }
-            // look for right-bottom piece
+                // look for right-bottom piece
             else if (right && below) {
-                if (!(n->matrix[i-1][j] || recognized[i-1][j] || n->matrix[i][j+1] || recognized[i][j+1])) {
-                    hval += 1;
-                    recognized[i][j] = true;
-                    recognized[i-1][j] = true;
-                    recognized[i][j+1] = true;
-                }
-            }
-            // look for top-left piece
-            else if (above && left) {
-                if (!(n->matrix[i+1][j] || recognized[i+1][j] || n->matrix[i][j-1] || recognized[i][j-1])) {
+                if (!(n->matrix[i+1][j] || recognized[i+1][j] || n->matrix[i][j+1] || recognized[i][j+1])) {
                     hval += 1;
                     recognized[i][j] = true;
                     recognized[i+1][j] = true;
+                    recognized[i][j+1] = true;
+                }
+            }
+                // look for top-left piece
+            else if (above && left) {
+                if (!(n->matrix[i-1][j] || recognized[i-1][j] || n->matrix[i][j-1] || recognized[i][j-1])) {
+                    hval += 1;
+                    recognized[i][j] = true;
+                    recognized[i-1][j] = true;
                     recognized[i][j-1] = true;
                 }
             }
@@ -494,6 +494,34 @@ int h2(Node* n) {
         for (int j = 0; j < N; ++j) {
             if (!(n->matrix[i][j] || recognized[i][j])) {
                 hval += 1;
+            }
+        }
+    }
+
+    return hval;
+}
+
+/* Heuristic 3 for BestFS
+ * Adds a for each 0 with an adjacent 0, b for each 0 surrounded by 1s
+ * For different values of the ratio a/b, different solutions can be found
+ * For different values of N, different ratios work best, for instance:
+ * -For N=5, ratio 0.5 returns solution with 27 steps, ratio 1/6 retuns solution with 53 steps
+ * -For N=6, ratio 0.5 returns solution with 100 steps, ratio 1/6 returns solution with 86 steps
+ * TODO: figure out a way to find the ideal ratio a/b, for a given N
+ */
+int h3(Node* n) {
+    int hval = 0;
+
+    for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < N; ++j) {
+            if (!n->matrix[i][j]) {
+                if (i-1 >= 0 && !n->matrix[i-1][j] || i+1 < N && !n->matrix[i+1][j] || j-1 >= 0 && !n->matrix[i][j-1] ||
+                j+1 < N && !n->matrix[i][j+1]) {
+                    hval += 1;
+                }
+                else {
+                    hval += 6;
+                }
             }
         }
     }
@@ -565,7 +593,7 @@ int main(void) {
     }
 
     Node* initial = create_node(initial_state, NULL, NULL, &final_state, 0);
-    Node* result = BestFS(initial, h1);
+    Node* result = BestFS(initial, h3);
     //Node* result = BFS(initial);
 
     if (result == NULL) {
